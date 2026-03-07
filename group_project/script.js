@@ -1,13 +1,12 @@
-﻿
-
+﻿// ==========================================
+// 全局配置与状态变量
+// ==========================================
 const API_ENDPOINTS = {
     CREATE_PRODUCT: '/products',
     LIST_PRODUCTS: '/products',
     GET_PRODUCT: (id) => `/products/${id}`,
     UPDATE_PRODUCT: (id) => `/products/${id}`,
     UPDATE_STATUS: (id) => `/products/${id}/status`,
-
-    // 新增订单 endpoints (请根据你后端的实际路由调整)
     CREATE_ORDER: '/orders',
     LIST_ORDERS: '/orders',
     GET_ORDER: (id) => `/orders/${id}`,
@@ -16,15 +15,24 @@ const API_ENDPOINTS = {
 };
 
 let currentEditingProductId = null;
-let currentEditingOrderId = null; // 新增：记录当前编辑的订单ID
+let currentEditingOrderId = null; 
 
+// 状态管理：分为已存在的网络图片 和 新选择的本地文件
+let currentExistingMedia = []; 
+let currentNewFiles = []; // 数据结构: { file: File对象, url: '内存预览地址' }
+
+// ==========================================
+// 初始化
+// ==========================================
 document.addEventListener('DOMContentLoaded', function () {
     initVendorPortal();
-    //setupStockLevels(); 库存预警的模拟逻辑
     initProductManagement();
-    initOrderManagement(); // 新增：初始化订单管理模块
+    initOrderManagement(); 
 });
 
+// ==========================================
+// 1. 基础框架与侧边栏逻辑
+// ==========================================
 function initVendorPortal() {
     const menuToggle = document.getElementById('menuToggle');
     const sidebar = document.getElementById('sidebar');
@@ -47,11 +55,9 @@ function initVendorPortal() {
     const menuItems = document.querySelectorAll('.menu-item');
     menuItems.forEach((item) => {
         item.addEventListener('click', function () {
-            // 1. 切换 active 样式
             menuItems.forEach((i) => i.classList.remove('active'));
             this.classList.add('active');
 
-            // 2. 移动端收起侧边栏
             if (window.innerWidth <= 991 && sidebar && menuToggle) {
                 sidebar.classList.remove('active');
                 const icon = menuToggle.querySelector('i');
@@ -61,173 +67,50 @@ function initVendorPortal() {
                 }
             }
 
-            // 3. 更新标题
             const menuTextNode = this.querySelector('span');
             const title = document.querySelector('.dashboard-title');
             if (menuTextNode && title) {
                 title.textContent = menuTextNode.textContent;
             }
 
-            // 4. 核心：切换显示对应的 Section 模块
             const targetId = this.getAttribute('data-target');
             if (targetId) {
                 document.querySelectorAll('.content-section').forEach(section => {
-                    section.style.display = 'none'; // 隐藏所有模块
+                    section.style.display = 'none'; 
                 });
                 const targetSection = document.getElementById(targetId);
                 if (targetSection) {
-                    targetSection.style.display = 'block'; // 显示目标模块
+                    targetSection.style.display = 'block'; 
                 }
             }
         });
     });
 
-    const searchInput = document.querySelector('.search-bar input');
-    if (searchInput) {
-        searchInput.addEventListener('input', function (e) {
-            const searchTerm = e.target.value.trim().toLowerCase();
-            if (searchTerm.length > 1) {
-                simulateSearch(searchTerm);
-            }
-        });
+    const cardTodayOrders = document.getElementById('cardTodayOrders');
+    const cardPendingOrders = document.getElementById('cardPendingOrders');
+    const orderMenu = document.querySelector('.menu-item[data-target="orderSection"]');
 
-        searchInput.addEventListener('keyup', debounce(function (e) {
-            if (e.key === 'Enter') {
-                performSearch(this.value);
-            }
-        }, 500));
-    }
-
-    const notification = document.querySelector('.notification');
-    if (notification) {
-        notification.addEventListener('click', function () {
-            alert('你有新的通知');
-            const badge = this.querySelector('.notification-badge');
-            if (badge) badge.style.display = 'none';
-        });
-    }
-
-    const viewButtons = document.querySelectorAll('.btn-view');
-    viewButtons.forEach((button) => {
-        button.addEventListener('click', function () {
-            if (this.dataset.action) return;
-            const row = this.closest('tr');
-            if (!row) return;
-            const orderIdCell = row.querySelector('td:first-child');
-            if (!orderIdCell) return;
-            alert(`查看订单: ${orderIdCell.textContent}`);
-        });
-    });
+    if (cardTodayOrders && orderMenu) cardTodayOrders.addEventListener('click', () => orderMenu.click());
+    if (cardPendingOrders && orderMenu) cardPendingOrders.addEventListener('click', () => orderMenu.click());
 
     startDataSimulation();
-
-    //库存预警的模拟逻辑
-    //const restockButtons = document.querySelectorAll('.inventory-alert .btn-small');
-    //restockButtons.forEach((button) => {
-    //    button.addEventListener('click', function () {
-    //        const productName = this.closest('.alert-item')?.querySelector('.product-name')?.textContent || '产品';
-    //        const quantity = prompt(`为 ${productName} 补货，输入数量:`, '50');
-    //        if (!quantity || isNaN(quantity) || Number(quantity) <= 0) return;
-
-    //       const stockLevel = this.closest('.alert-item')?.querySelector('.stock-fill');
-    //        if (!stockLevel) return;
-
-    //        const currentWidth = parseInt(stockLevel.style.width || '12', 10);
-    //        const newWidth = Math.min(currentWidth + 20, 100);
-    //        stockLevel.style.width = `${newWidth}%`;
-    //        if (newWidth > 70) stockLevel.className = 'stock-fill stock-good';
-    //        else if (newWidth > 30) stockLevel.className = 'stock-fill stock-medium';
-    //        else stockLevel.className = 'stock-fill stock-low';
-    //    });
-    //});
-
-}
-//库存预警的模拟逻辑
-//function setupStockLevels() {
-//    const stockBars = document.querySelectorAll('.stock-fill');
-//    stockBars.forEach((bar, index) => {
-//        let width = 20;
-//        if (index === 0) width = 12;
-//        if (index === 1) width = 17;
-//        if (index === 2) width = 23;
-//       bar.style.width = `${width}%`;
-//    });
-//}
-
-function simulateSearch(term) {
-    const tableRows = document.querySelectorAll('.order-table tbody tr');
-    tableRows.forEach((row) => {
-        const rowText = row.textContent.toLowerCase();
-        row.style.backgroundColor = rowText.includes(term) ? 'rgba(52, 152, 219, 0.1)' : '';
-    });
-}
-
-function performSearch(term) {
-    if (!term.trim()) return;
-    alert(`执行搜索: ${term}`);
-    const searchInput = document.querySelector('.search-bar input');
-    if (searchInput) searchInput.value = '';
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function () {
-        const context = this;
-        const args = arguments;
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), wait);
-    };
 }
 
 function startDataSimulation() {
-    setInterval(updateDashboardData, 30000);
-    setInterval(updateOrderStatus, 60000);
-}
-
-function updateDashboardData() {
-    const cards = document.querySelectorAll('.card');
-    if (cards.length < 3) return;
-
-    const todayOrders = cards[0].querySelector('.card-value');
-    if (todayOrders) {
-        const current = parseInt(todayOrders.textContent || '0', 10);
-        todayOrders.textContent = String(Math.max(0, current + Math.floor(Math.random() * 6) - 1));
-    }
-}
-
-function updateOrderStatus() {
-    const statusBadges = document.querySelectorAll('.status-badge');
-    statusBadges.forEach((badge) => {
-        if (Math.random() <= 0.7) return;
-        const s = badge.textContent.trim();
-        if (s.includes('待')) {
-            badge.textContent = '处理中';
-            badge.className = 'status-badge status-processing';
-        } else if (s.includes('处理')) {
-            badge.textContent = '已发货';
-            badge.className = 'status-badge status-shipped';
+    setInterval(() => {
+        const cards = document.querySelectorAll('.dashboard-cards .card');
+        if (cards.length < 3) return;
+        const todayOrders = cards[0].querySelector('.card-value');
+        if (todayOrders) {
+            const current = parseInt(todayOrders.textContent || '0', 10);
+            todayOrders.textContent = String(Math.max(0, current + Math.floor(Math.random() * 6) - 1));
         }
-    });
+    }, 30000);
 }
 
-window.addEventListener('resize', function () {
-    const sidebar = document.getElementById('sidebar');
-    const menuToggle = document.getElementById('menuToggle');
-    const mainContent = document.querySelector('.main-content');
-    if (!mainContent) return;
-
-    if (window.innerWidth > 991 && sidebar?.classList.contains('active')) {
-        sidebar.classList.remove('active');
-        const icon = menuToggle?.querySelector('i');
-        if (icon) {
-            icon.classList.remove('fa-times');
-            icon.classList.add('fa-bars');
-        }
-    }
-
-    mainContent.style.marginLeft = window.innerWidth <= 991 ? '0' : 'var(--sidebar-width)';
-});
-
+// ==========================================
+// 2. 产品管理模块逻辑
+// ==========================================
 function initProductManagement() {
     const toggleFormBtn = document.getElementById('toggleFormBtn');
     if (toggleFormBtn) {
@@ -243,11 +126,16 @@ function initProductManagement() {
     const quickAddProduct = document.getElementById('quickAddProduct');
     if (quickAddProduct) {
         quickAddProduct.addEventListener('click', function () {
+            const productMenu = document.getElementById('productsMenu');
+            if (productMenu) productMenu.click();
+
             const formCard = document.getElementById('productFormCard');
             const toggleBtn = document.getElementById('toggleFormBtn');
             if (formCard) formCard.style.display = 'block';
             if (toggleBtn) toggleBtn.innerHTML = '<i class="fas fa-minus"></i> 隐藏表单';
+            
             setFormModeForCreate();
+            if (formCard) formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     }
 
@@ -261,9 +149,22 @@ function initProductManagement() {
 
     document.getElementById('refreshProductListBtn')?.addEventListener('click', loadProductList);
 
+    // 监听表格里的操作（编辑、删除产品、快捷删除单张图片）
     const productTableBody = document.getElementById('productTableBody');
     if (productTableBody) {
         productTableBody.addEventListener('click', async function (e) {
+            // 1. 如果点击的是某张图片上的 "×" 删除按钮
+            const deleteMediaBtn = e.target.closest('.btn-delete-media');
+            if (deleteMediaBtn) {
+                e.stopPropagation();
+                const productId = deleteMediaBtn.getAttribute('data-product-id');
+                const mediaId = deleteMediaBtn.getAttribute('data-media-id');
+                const url = deleteMediaBtn.getAttribute('data-url');
+                await handleDeleteProductMedia(productId, mediaId, url);
+                return;
+            }
+
+            // 2. 常规的编辑或删除产品
             const btn = e.target.closest('button[data-action]');
             if (!btn) return;
             const action = btn.getAttribute('data-action');
@@ -274,226 +175,202 @@ function initProductManagement() {
         });
     }
 
-    // ========== 新增：保留原格式的图片上传与本地预览 ==========
+    // 监听多文件上传选择 (已修复内存泄露问题)
     const imageInput = document.getElementById('productImage');
-    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-    const imagePreview = document.getElementById('imagePreview');
-
     if (imageInput) {
         imageInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                currentProductImageFile = file; // 核心：保存原始 File 对象
-                
-                // 使用 URL.createObjectURL 生成本地内存地址，直接预览，不转 Base64
-                currentProductImageUrl = URL.createObjectURL(file);
-                if (imagePreview && imagePreviewContainer) {
-                    imagePreview.src = currentProductImageUrl;
-                    imagePreviewContainer.style.display = 'block';
-                }
-            } else {
-                currentProductImageFile = null;
-                currentProductImageUrl = '';
-                if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
-            }
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+                // 提前生成 URL 并缓存，方便后续精准释放内存
+                currentNewFiles.push({
+                    file: file,
+                    url: URL.createObjectURL(file)
+                });
+            });
+            renderImagePreviews(); 
+            e.target.value = ''; // 清空 input 允许二次选择同一张
         });
     }
-    // ==========================================================
 
     setFormModeForCreate();
     loadProductList();
 }
 
-function getProductFormData() {
-    return {
-        name: (document.getElementById('productName')?.value || '').trim(),
-        name_cn: (document.getElementById('productNameCn')?.value || '').trim(),
-        price: parseFloat(document.getElementById('productPrice')?.value) || 0,
-        category: document.getElementById('productCategory')?.value || '',
-        description: (document.getElementById('productDescription')?.value || '').trim(),
-        description_cn: (document.getElementById('productDescriptionCn')?.value || '').trim(),
-        imageFile: currentProductImageFile // 将 File 对象传出，供 submit 函数处理
-    };
+// 动态渲染表单内的缩略图
+function renderImagePreviews() {
+    const container = document.getElementById('imagePreviewContainer');
+    const list = document.getElementById('imagePreviewList');
+    if (!container || !list) return;
+
+    list.innerHTML = '';
+    const hasImages = currentExistingMedia.length > 0 || currentNewFiles.length > 0;
+    container.style.display = hasImages ? 'block' : 'none';
+
+    // 渲染后端已存在的图片
+    currentExistingMedia.forEach((media, index) => {
+        const wrap = createImageWrapper(media.url, () => {
+            currentExistingMedia.splice(index, 1); 
+            renderImagePreviews(); 
+        });
+        list.appendChild(wrap);
+    });
+
+    // 渲染新选择的文件
+    currentNewFiles.forEach((item, index) => {
+        const wrap = createImageWrapper(item.url, () => {
+            URL.revokeObjectURL(item.url); // 销毁内存地址，防止内存泄露
+            currentNewFiles.splice(index, 1);
+            renderImagePreviews();
+        });
+        list.appendChild(wrap);
+    });
 }
 
-// ========== 阿里云 OSS 直传函数 ==========
-async function uploadToOSS(file) {
+// 创建带删除按钮的方块组件
+function createImageWrapper(src, onDelete) {
+    const div = document.createElement('div');
+    div.style.position = 'relative';
+    div.style.width = '80px';
+    div.style.height = '80px';
+    
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '5px';
+    img.style.border = '1px solid #ddd';
+
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = '<i class="fas fa-times"></i>';
+    delBtn.style.position = 'absolute';
+    delBtn.style.top = '-6px';
+    delBtn.style.right = '-6px';
+    delBtn.style.background = '#e74c3c';
+    delBtn.style.color = 'white';
+    delBtn.style.border = 'none';
+    delBtn.style.borderRadius = '50%';
+    delBtn.style.width = '20px';
+    delBtn.style.height = '20px';
+    delBtn.style.cursor = 'pointer';
+    delBtn.style.display = 'flex';
+    delBtn.style.alignItems = 'center';
+    delBtn.style.justifyContent = 'center';
+    delBtn.style.fontSize = '12px';
+    delBtn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    
+    delBtn.onclick = (e) => { e.preventDefault(); onDelete(); };
+    div.appendChild(img);
+    div.appendChild(delBtn);
+    return div;
+}
+
+// 批量上传图片接口
+async function uploadThumbnailsByBackend(productId, files) {
     try {
-        // 【强烈推荐】生产环境：向你的后端请求 STS 临时凭证
-        // const credentials = await fetch('/api/get-oss-sts-token').then(res => res.json());
-
-        // 初始化 OSS 客户端
-        const client = new OSS({
-            // 你的 Bucket 所在地域，例如华东1（杭州）就是 oss-cn-hangzhou
-            region: 'oss-cn-hangzhou', 
-            
-            // 开发测试阶段可以暂时写死（仅限本地测试），上线前务必改为使用 STS 临时凭证！
-            accessKeyId: 'YOUR_ACCESS_KEY_ID',             // 替换为你的真实 ID 或临时 ID
-            accessKeySecret: 'YOUR_ACCESS_KEY_SECRET',     // 替换为你的真实 Secret 或临时 Secret
-            // stsToken: credentials.SecurityToken,        // 如果使用 STS，取消这行的注释
-
-            // 你的 Bucket 名称
-            bucket: 'your-bucket-name'                     
+        const formData = new FormData();
+        files.forEach(file => { formData.append('files', file); });
+        const response = await fetch(`/products/${productId}/thumbnails?set_first_as_main=true`, {
+            method: 'POST',
+            body: formData
         });
-
-        // 构造一个唯一的文件名，防止重名覆盖 (例如: products/16980234123-842.jpg)
-        const fileExtension = file.name.split('.').pop();
-        const uniqueFileName = `products/${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExtension}`;
-
-        // 调用 put 接口上传文件
-        console.log(`开始上传图片至 OSS: ${uniqueFileName}`);
-        const result = await client.put(uniqueFileName, file);
-        
-        // 返回 OSS 上的可访问链接
-        // 注意：如果你的 Bucket 是私有的，这里返回的 URL 会带有签名，过期后无法访问。
-        // 对于产品图片，通常建议将 Bucket 读权限设置为“公共读”。
-        return result.url; 
-        
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(getErrorMessageFromResponse(data, '图片上传失败'));
+        return data;
     } catch (error) {
-        console.error('OSS 上传失败:', error);
-        throw new Error('图片上传到云存储失败，请检查网络或配置');
+        throw error;
     }
 }
-// =========================================
 
 async function handleProductFormSubmit(e) {
     e.preventDefault();
-    const productData = getProductFormData();
-
-    if (!productData.name) {
-        showNotification('产品名称是必填项', 'error');
-        return;
-    }
+    const name = (document.getElementById('productName')?.value || '').trim();
+    if (!name) return showNotification('产品名称是必填项', 'error');
 
     const submitBtn = document.querySelector('#productForm button[type="submit"]');
     const originalText = submitBtn?.innerHTML || '';
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';
-    }
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...'; }
 
     try {
-        // ========== 新增：上传云存储逻辑占位 ==========
-        let finalImageUrl = currentProductImageUrl; // 默认使用已有的 URL（如果是编辑状态）
-
-        // 如果用户选择了新文件，先将其上传到云存储
-        if (productData.imageFile) {
-            console.log('准备上传的原始文件对象:', productData.imageFile);
-            
-        // TODO: 在这里调用你的云存储上传函数，获取真实 URL
-        // 如果用户选择了新文件，先将其直传到阿里云 OSS
-        if (productData.imageFile) {
-            // 给用户一个上传中的提示
-            if (submitBtn) {
-                submitBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> 上传图片中...';
-            }
-            
-            // 调用我们刚才写好的 OSS 上传函数，并等待返回真实的云端 URL
-            finalImageUrl = await uploadToOSS(productData.imageFile);
-            
-            // 图片上传完成后，更新按钮状态，准备提交表单数据
-            if (submitBtn) {
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存数据中...';
-            }
-        }
-            // 演示用：模拟上传成功后获取到的云端 URL
-            finalImageUrl = 'https://your-cloud-storage.com/path/image.jpg'; 
-        }
-
-        // 构造最终要发给后端的 JSON 负载 (剔除无法序列化的 File 对象)
-        const payload = { ...productData };
-        delete payload.imageFile; 
-
-// 匹配 product_media 表结构：将 URL 放入 media 数组中
-        if (finalImageUrl) {
-            payload.media = [
-                {
-                    media_type: 'image', // 对应 ENUM('image', 'video')
-                    url: finalImageUrl   // 对应 url 字段
-                }
-            ];
-        } else {
-            payload.media = [];
-        }
-        // ==============================================
-
         const isEdit = currentEditingProductId !== null;
         const endpoint = isEdit ? API_ENDPOINTS.UPDATE_PRODUCT(currentEditingProductId) : API_ENDPOINTS.CREATE_PRODUCT;
-        const method = isEdit ? 'PATCH' : 'POST';
+        
+        const payload = {
+            name: name,
+            name_cn: (document.getElementById('productNameCn')?.value || '').trim(),
+            price: parseFloat(document.getElementById('productPrice')?.value) || 0,
+            category: document.getElementById('productCategory')?.value || '',
+            description: (document.getElementById('productDescription')?.value || '').trim(),
+            description_cn: (document.getElementById('productDescriptionCn')?.value || '').trim(),
+            // 修复隐患：传递剩余图片的完整信息（必须包含 media_id），防止后端强制重建导致关联错乱
+            media: currentExistingMedia.map(m => ({ 
+                media_id: m.media_id, 
+                media_type: m.media_type || 'image', 
+                url: m.url 
+            }))
+        };
 
         const response = await fetch(endpoint, {
-            method,
+            method: isEdit ? 'PATCH' : 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
-        // 检查请求是否成功
         if (!response.ok) {
             const errorData = await response.json().catch(() => null);
             throw new Error(getErrorMessageFromResponse(errorData, '提交失败'));
         }
 
-        // 成功后的处理：显示通知、重置表单、刷新列表
+        const responseData = await response.json().catch(() => ({}));
+        const productId = isEdit ? currentEditingProductId : responseData?.product_id;
+
+        // 从新文件结构中提取出纯 File 对象进行上传
+        const filesToUpload = currentNewFiles.map(item => item.file);
+
+        if (filesToUpload.length > 0 && productId) {
+            if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> 正在上传图片...';
+            await uploadThumbnailsByBackend(productId, filesToUpload);
+        } else if (filesToUpload.length > 0 && !productId) {
+            throw new Error('产品已保存，但未获取到 product_id，无法上传新图片');
+        }
+
         showNotification(isEdit ? '产品更新成功' : '产品创建成功', 'success');
         setFormModeForCreate();
         await loadProductList();
-
     } catch (error) {
-        console.error('表单提交错误:', error);
-        showNotification(error.message || '网络或服务器错误，请重试', 'error');
+        console.error(error);
+        showNotification(error.message || '操作失败，请重试', 'error');
     } finally {
-        // 无论成功还是失败，都恢复提交按钮的状态
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-        }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalText; }
     }
 }
+
 function setFormModeForCreate() {
     currentEditingProductId = null;
-    currentProductImageFile = null; // 清空暂存文件
-    currentProductImageUrl = '';    // 清空预览链接
-    const productForm = document.getElementById('productForm');
+    currentExistingMedia = []; 
+    
+    // 清理上一次的内存残留
+    if (currentNewFiles.length > 0) {
+        currentNewFiles.forEach(item => URL.revokeObjectURL(item.url));
+    }
+    currentNewFiles = [];      
+
+    document.getElementById('productForm')?.reset();
+    
     const submitBtn = document.getElementById('productSubmitBtn');
-    const cancelEditBtn = document.getElementById('cancelEditBtn');
-    const formFeedback = document.getElementById('formFeedback');
+    if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-save"></i> 创建产品'; submitBtn.style.background = '#27ae60'; }
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    if (cancelBtn) cancelBtn.style.display = 'none';
 
-    productForm?.reset();
-    if (submitBtn) {
-        submitBtn.innerHTML = '<i class="fas fa-save"></i> 创建产品';
-        submitBtn.style.background = '#27ae60';
-    }
-    if (cancelEditBtn) cancelEditBtn.style.display = 'none';
-    if (formFeedback) {
-        formFeedback.style.display = 'none';
-        formFeedback.style.background = '#d4edda';
-        formFeedback.style.color = '#155724';
-    }
-
-    // 清空文件输入框和隐藏预览
-    const imageInput = document.getElementById('productImage');
-    if (imageInput) imageInput.value = '';
-    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-    if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+    renderImagePreviews();
 }
 
 function setFormModeForEdit(product) {
     currentEditingProductId = product.product_id || product.id;
+    document.getElementById('productFormCard').style.display = 'block';
+    document.getElementById('toggleFormBtn').innerHTML = '<i class="fas fa-minus"></i> 隐藏表单';
 
-    const formCard = document.getElementById('productFormCard');
-    const toggleBtn = document.getElementById('toggleFormBtn');
-    const submitBtn = document.getElementById('productSubmitBtn');
-    const cancelEditBtn = document.getElementById('cancelEditBtn');
-    const feedback = document.getElementById('formFeedback');
-    const feedbackMessage = document.getElementById('feedbackMessage');
-
-    if (formCard) formCard.style.display = 'block';
-    if (toggleBtn) toggleBtn.innerHTML = '<i class="fas fa-minus"></i> 隐藏表单';
-
-    const setVal = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.value = val ?? '';
-    };
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
     setVal('productName', product.name);
     setVal('productNameCn', product.name_cn);
     setVal('productPrice', product.price ?? 0);
@@ -501,61 +378,37 @@ function setFormModeForEdit(product) {
     setVal('productDescription', product.description ?? '');
     setVal('productDescriptionCn', product.description_cn ?? '');
     
+    currentExistingMedia = Array.isArray(product.media) ? [...product.media] : [];
+    
+    if (currentNewFiles.length > 0) {
+        currentNewFiles.forEach(item => URL.revokeObjectURL(item.url));
+    }
+    currentNewFiles = [];
+    
+    renderImagePreviews();
 
-    // 处理编辑时的图片回显
-    currentProductImageFile = null; // 编辑时不自带新文件，除非用户重新选
-    // 尝试从嵌套的 media 数组中获取第一张图片的 URL
-    currentProductImageUrl = '';
-    if (product.media && Array.isArray(product.media) && product.media.length > 0) {
-    // 寻找第一条媒体记录作为封面预览
-        currentProductImageUrl = product.media[0].url || ''; 
-    }
-    
-    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-    const imagePreview = document.getElementById('imagePreview');
-    const imageInput = document.getElementById('productImage');
-    
-    if (imageInput) imageInput.value = ''; // 清空输入框
-    
-    if (currentProductImageUrl && imagePreview && imagePreviewContainer) {
-        imagePreview.src = currentProductImageUrl;
-        imagePreviewContainer.style.display = 'block';
-    } else if (imagePreviewContainer) {
-        imagePreviewContainer.style.display = 'none';
-    }
-
-    if (submitBtn) {
-        submitBtn.innerHTML = '<i class="fas fa-pen"></i> 更新产品';
-        submitBtn.style.background = '#f39c12';
-    }
-    if (cancelEditBtn) cancelEditBtn.style.display = 'inline-block';
-    if (feedback && feedbackMessage) {
-        feedback.style.display = 'block';
-        feedback.style.background = '#fff8e1';
-        feedback.style.color = '#8a6d3b';
-        feedbackMessage.textContent = `正在编辑产品 ID: ${currentEditingProductId}`;
-    }
+    const submitBtn = document.getElementById('productSubmitBtn');
+    if (submitBtn) { submitBtn.innerHTML = '<i class="fas fa-pen"></i> 更新产品'; submitBtn.style.background = '#f39c12'; }
+    document.getElementById('cancelEditBtn').style.display = 'inline-block';
 }
-
 
 async function loadProductList() {
     const tbody = document.getElementById('productTableBody');
     if (!tbody) return;
-
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#7f8c8d;padding:20px;">正在加载产品...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#7f8c8d;padding:20px;">正在加载产品...</td></tr>';
 
     try {
         const response = await fetch(API_ENDPOINTS.LIST_PRODUCTS);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const products = Array.isArray(data) ? data : (data.products || []);
-        renderProductTable(products);
-
+        
         const badge = document.getElementById('productCountBadge');
         if (badge) badge.textContent = String(products.length);
+        
+        renderProductTable(products);
     } catch (error) {
-        console.error(error);
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e74c3c;padding:20px;">加载失败，请确认后端已启动</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败，请确认后端已启动</td></tr>';
     }
 }
 
@@ -564,15 +417,29 @@ function renderProductTable(products) {
     if (!tbody) return;
 
     if (!products.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#7f8c8d;padding:20px;">暂无产品数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#7f8c8d;padding:20px;">暂无产品数据</td></tr>';
         return;
     }
 
     tbody.innerHTML = products.map((p) => {
         const id = p.product_id || p.id || '';
+        
+        // 生成表格内的图片列表 (带删除快捷按钮)
+        const mediaArray = Array.isArray(p.media) ? p.media : [];
+        const imagesHtml = mediaArray.length > 0 ? mediaArray.map(m => `
+            <div style="position: relative; width: 45px; height: 45px; display: inline-block; margin-right: 6px; margin-bottom: 6px;">
+                <img src="${m.url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;">
+                <button class="btn-delete-media" data-product-id="${id}" data-media-id="${m.media_id || ''}" data-url="${m.url}" title="直接删除此图片" 
+                        style="position: absolute; top: -5px; right: -5px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('') : '<span style="color: #999; font-size: 12px;">无图片</span>';
+
         return `
             <tr>
                 <td>${id}</td>
+                <td style="max-width: 180px;">${imagesHtml}</td>
                 <td>${escapeHtml(p.name || '')}</td>
                 <td>${escapeHtml(p.name_cn || '')}</td>
                 <td>${formatPrice(p.price)}</td>
@@ -591,36 +458,222 @@ function renderProductTable(products) {
     }).join('');
 }
 
+// ==========================================
+// 快捷删除单张图片的逻辑
+// ==========================================
+async function handleDeleteProductMedia(productId, mediaId, url) {
+    if (!window.confirm('确认要直接从产品列表中删除这张图片吗？')) return;
+
+    try {
+        /*
+         * 💡 接口对接提示：
+         * 如果你后端支持独立删除某张图片的接口，强烈建议解开下面这行代码使用，效率更高！
+         */
+        // const response = await fetch(`/products/${productId}/media/${mediaId}`, { method: 'DELETE' });
+
+        /*
+         * 当前使用兼容方案：查出全量产品，剔除那张图后再 PATCH 覆盖
+         */
+        const getRes = await fetch(API_ENDPOINTS.GET_PRODUCT(productId));
+        if (!getRes.ok) throw new Error('无法读取产品数据');
+        const product = await getRes.json();
+        
+        const updatedMedia = (product.media || []).filter(m => {
+            if (mediaId && m.media_id) return String(m.media_id) !== String(mediaId);
+            return m.url !== url; 
+        });
+
+        const updateRes = await fetch(API_ENDPOINTS.UPDATE_PRODUCT(productId), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ media: updatedMedia })
+        });
+        if (!updateRes.ok) throw new Error('同步服务器状态失败');
+
+        showNotification('图片已删除', 'success');
+        
+        // 如果被删除图片的产品正处于“编辑状态”，清空表单防止再次提交错乱
+        if (String(currentEditingProductId) === String(productId)) {
+            setFormModeForCreate();
+        }
+        await loadProductList();
+
+    } catch (error) {
+        console.error(error);
+        showNotification(error.message || '删除图片失败', 'error');
+    }
+}
+
 async function handleEditProduct(productId) {
     try {
         const response = await fetch(API_ENDPOINTS.GET_PRODUCT(productId));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const product = await response.json();
-        setFormModeForEdit(product);
+        if (!response.ok) throw new Error('获取失败');
+        setFormModeForEdit(await response.json());
+        const formCard = document.getElementById('productFormCard');
+        if (formCard) formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (error) {
-        console.error(error);
-        showNotification('加载产品详情失败', 'error');
+        showNotification('加载详情失败', 'error');
     }
 }
 
 async function handleDeleteProduct(productId) {
-    const confirmed = window.confirm(`确认删除产品 ID: ${productId} ?`);
-    if (!confirmed) return;
-
+    if (!window.confirm(`确认删除产品 ID: ${productId} ?`)) return;
     try {
         const response = await fetch(API_ENDPOINTS.GET_PRODUCT(productId), { method: 'DELETE' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) throw new Error('删除失败');
         showNotification('产品删除成功', 'success');
         await loadProductList();
-        if (String(currentEditingProductId) === String(productId)) {
-            setFormModeForCreate();
-        }
+        if (String(currentEditingProductId) === String(productId)) setFormModeForCreate();
     } catch (error) {
-        console.error(error);
         showNotification('删除产品失败', 'error');
     }
 }
 
+// ==========================================
+// 3. 订单管理模块逻辑
+// ==========================================
+function initOrderManagement() {
+    const toggleOrderFormBtn = document.getElementById('toggleOrderFormBtn');
+    if (toggleOrderFormBtn) {
+        toggleOrderFormBtn.addEventListener('click', () => {
+            const formCard = document.getElementById('orderFormCard');
+            const isHidden = formCard.style.display === 'none';
+            formCard.style.display = isHidden ? 'block' : 'none';
+            if (isHidden) resetOrderForm();
+        });
+    }
+
+    document.getElementById('cancelOrderEditBtn')?.addEventListener('click', () => {
+        document.getElementById('orderFormCard').style.display = 'none';
+        resetOrderForm();
+    });
+
+    const orderForm = document.getElementById('orderForm');
+    if (orderForm) orderForm.addEventListener('submit', handleOrderSubmit);
+
+    document.getElementById('refreshOrderListBtn')?.addEventListener('click', loadOrderList);
+
+    const orderTableBody = document.getElementById('orderTableBody');
+    if (orderTableBody) {
+        orderTableBody.addEventListener('click', async function (e) {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-action');
+            const id = btn.getAttribute('data-id');
+            if (action === 'edit') await handleEditOrder(id);
+            if (action === 'delete') await handleDeleteOrder(id);
+        });
+    }
+
+    loadOrderList();
+}
+
+function resetOrderForm() {
+    currentEditingOrderId = null;
+    document.getElementById('orderForm')?.reset();
+    const btn = document.getElementById('orderSubmitBtn');
+    if (btn) btn.innerHTML = '<i class="fas fa-save"></i> 保存订单';
+}
+
+async function loadOrderList() {
+    const tbody = document.getElementById('orderTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">正在加载订单...</td></tr>';
+
+    try {
+        const response = await fetch(API_ENDPOINTS.LIST_ORDERS);
+        if (!response.ok) throw new Error('失败');
+        const data = await response.json();
+        renderOrderTable(Array.isArray(data) ? data : (data.orders || []));
+    } catch (error) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;">加载失败，请确认后端已启动</td></tr>';
+    }
+}
+
+function renderOrderTable(orders) {
+    const tbody = document.getElementById('orderTableBody');
+    if (!tbody) return;
+    if (!orders.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">暂无订单数据</td></tr>'; return; }
+
+    tbody.innerHTML = orders.map((o) => {
+        const id = o.order_id || o.id || '';
+        let statusClass = 'status-pending';
+        if (o.status === '处理中') statusClass = 'status-processing';
+        if (o.status === '已发货') statusClass = 'status-shipped';
+        if (o.status === '已交付') statusClass = 'status-delivered';
+
+        return `<tr>
+            <td>#${id}</td>
+            <td>${escapeHtml(o.customer_name || o.customer || '')}</td>
+            <td>$${Number(o.total_amount || o.total || 0).toFixed(2)}</td>
+            <td><span class="status-badge ${statusClass}">${escapeHtml(o.status || '待处理')}</span></td>
+            <td>${escapeHtml(o.created_at ? new Date(o.created_at).toLocaleDateString() : '-')}</td>
+            <td>
+                <button class="btn-view" data-action="edit" data-id="${id}" style="margin-right:6px;"><i class="fas fa-pen"></i> 编辑</button>
+                <button class="btn-view" data-action="delete" data-id="${id}" style="background:#e74c3c;color:#fff;"><i class="fas fa-trash"></i> 删除</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function handleOrderSubmit(e) {
+    e.preventDefault();
+    const payload = {
+        customer_name: document.getElementById('orderCustomer').value.trim(),
+        total_amount: parseFloat(document.getElementById('orderTotal').value) || 0,
+        status: document.getElementById('orderStatus').value
+    };
+
+    const isEdit = currentEditingOrderId !== null;
+    try {
+        const response = await fetch(isEdit ? API_ENDPOINTS.UPDATE_ORDER(currentEditingOrderId) : API_ENDPOINTS.CREATE_ORDER, {
+            method: isEdit ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error('提交失败');
+        showNotification(isEdit ? '订单更新成功' : '订单创建成功', 'success');
+        document.getElementById('orderFormCard').style.display = 'none';
+        resetOrderForm();
+        loadOrderList();
+    } catch (error) {
+        showNotification('操作失败，请重试', 'error');
+    }
+}
+
+async function handleEditOrder(orderId) {
+    try {
+        const response = await fetch(API_ENDPOINTS.GET_ORDER(orderId));
+        if (!response.ok) throw new Error('加载失败');
+        const order = await response.json();
+        
+        currentEditingOrderId = orderId;
+        document.getElementById('orderFormCard').style.display = 'block';
+        document.getElementById('orderCustomer').value = order.customer_name || order.customer || '';
+        document.getElementById('orderTotal').value = order.total_amount || order.total || 0;
+        document.getElementById('orderStatus').value = order.status || '待处理';
+        document.getElementById('orderSubmitBtn').innerHTML = '<i class="fas fa-pen"></i> 更新订单';
+        document.getElementById('orderSection').scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+        showNotification('加载订单详情失败', 'error');
+    }
+}
+
+async function handleDeleteOrder(orderId) {
+    if (!window.confirm(`确认删除订单 #${orderId} ?`)) return;
+    try {
+        const response = await fetch(API_ENDPOINTS.DELETE_ORDER(orderId), { method: 'DELETE' });
+        if (!response.ok) throw new Error('删除失败');
+        showNotification('订单删除成功', 'success');
+        loadOrderList();
+    } catch (error) {
+        showNotification('删除订单失败', 'error');
+    }
+}
+
+// ==========================================
+// 全局工具函数
+// ==========================================
 function getErrorMessageFromResponse(data, fallback) {
     if (!data) return fallback;
     if (typeof data === 'string') return data;
@@ -633,61 +686,11 @@ function getErrorMessageFromResponse(data, fallback) {
     return fallback;
 }
 
-//function updateStockAlertCount(productData) {
-//   const lowStockCard = document.querySelector('.card:nth-child(4) .card-value');
-//    if (lowStockCard) {
-//        const current = parseInt(lowStockCard.textContent || '0', 10);
-//       lowStockCard.textContent = String(current + 1);
-//    }
-//
-//    const inventoryAlert = document.querySelector('.inventory-alert');
-//    if (!inventoryAlert || productData.stock >= 50) return;
-//
-//    const newAlert = document.createElement('div');
-//    newAlert.className = 'alert-item';
-//    newAlert.innerHTML = `
-//        <div class="product-info">
-//            <div class="product-img"><i class="fas fa-box"></i></div>
-//            <div>
-//                <div class="product-name" style="font-weight:600;">${escapeHtml(productData.name)}</div>
-//                <div class="product-stock" style="font-size:.9rem;color:#666;">库存: ${productData.stock}</div>
-//               <div class="stock-level">
-//                    <div class="stock-fill ${productData.stock > 20 ? 'stock-medium' : 'stock-low'}" style="width:${Math.min(productData.stock, 100)}%"></div>
-//                </div>
-//            </div>
-//        </div>
-//       <button class="btn btn-small" onclick="viewProductDetail('')">
-//            <i class="fas fa-eye"></i> 查看
-//        </button>
-//    `;
-//
-//    if (inventoryAlert.firstChild) inventoryAlert.insertBefore(newAlert, inventoryAlert.firstChild);
-//    else inventoryAlert.appendChild(newAlert);
-//}
-
-function updateProductCountBadge() {
-    const badge = document.getElementById('productCountBadge');
-    if (!badge) return;
-    const current = parseInt(badge.textContent || '0', 10);
-    badge.textContent = String(current + 1);
-}
-
-function viewProductDetail(productId) {
-    alert(`查看产品: ${productId}`);
-}
-
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `notification-popup ${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
-            <span>${message}</span>
-        </div>
-    `;
-
+    notification.innerHTML = `<div class="notification-content"><i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i><span>${message}</span></div>`;
     document.body.appendChild(notification);
-
     setTimeout(() => notification.classList.add('show'), 10);
     setTimeout(() => {
         notification.classList.remove('show');
@@ -709,208 +712,12 @@ function showNotification(message, type = 'info') {
     document.head.appendChild(style);
 })();
 
-async function fetchProductDetails(productId) {
-    try {
-        const response = await fetch(API_ENDPOINTS.GET_PRODUCT(productId));
-        if (!response.ok) return null;
-        return await response.json();
-    } catch (error) {
-        console.error(error);
-        return null;
-    }
-}
-
 function escapeHtml(value) {
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function formatPrice(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return '¥0.00';
     return `¥${n.toFixed(2)}`;
-}
-
-// ==========================================
-// 订单管理模块逻辑
-// ==========================================
-
-function initOrderManagement() {
-    // 表单显隐切换
-    const toggleOrderFormBtn = document.getElementById('toggleOrderFormBtn');
-    if (toggleOrderFormBtn) {
-        toggleOrderFormBtn.addEventListener('click', () => {
-            const formCard = document.getElementById('orderFormCard');
-            const isHidden = formCard.style.display === 'none';
-            formCard.style.display = isHidden ? 'block' : 'none';
-            if (isHidden) resetOrderForm();
-        });
-    }
-
-    // 取消编辑
-    document.getElementById('cancelOrderEditBtn')?.addEventListener('click', () => {
-        document.getElementById('orderFormCard').style.display = 'none';
-        resetOrderForm();
-    });
-
-    // 表单提交
-    const orderForm = document.getElementById('orderForm');
-    if (orderForm) {
-        orderForm.addEventListener('submit', handleOrderSubmit);
-    }
-
-    // 刷新列表
-    document.getElementById('refreshOrderListBtn')?.addEventListener('click', loadOrderList);
-
-    // 表格内的编辑和删除按钮事件委托
-    const orderTableBody = document.getElementById('orderTableBody');
-    if (orderTableBody) {
-        orderTableBody.addEventListener('click', async function (e) {
-            const btn = e.target.closest('button[data-action]');
-            if (!btn) return;
-            const action = btn.getAttribute('data-action');
-            const id = btn.getAttribute('data-id');
-            if (!id) return;
-            
-            if (action === 'edit') await handleEditOrder(id);
-            if (action === 'delete') await handleDeleteOrder(id);
-        });
-    }
-
-    // 初始化加载数据
-    loadOrderList();
-}
-
-function resetOrderForm() {
-    currentEditingOrderId = null;
-    const form = document.getElementById('orderForm');
-    if (form) form.reset();
-    const btn = document.getElementById('orderSubmitBtn');
-    if (btn) btn.innerHTML = '<i class="fas fa-save"></i> 保存订单';
-}
-
-async function loadOrderList() {
-    const tbody = document.getElementById('orderTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">正在加载订单...</td></tr>';
-
-    try {
-        const response = await fetch(API_ENDPOINTS.LIST_ORDERS);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        const orders = Array.isArray(data) ? data : (data.orders || []);
-        renderOrderTable(orders);
-    } catch (error) {
-        console.error(error);
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;">加载失败，请确认后端已启动</td></tr>';
-    }
-}
-
-function renderOrderTable(orders) {
-    const tbody = document.getElementById('orderTableBody');
-    if (!tbody) return;
-
-    if (!orders.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">暂无订单数据</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = orders.map((o) => {
-        const id = o.order_id || o.id || '';
-        // 根据状态分配颜色类名
-        let statusClass = 'status-pending';
-        if (o.status === '处理中') statusClass = 'status-processing';
-        if (o.status === '已发货') statusClass = 'status-shipped';
-        if (o.status === '已交付') statusClass = 'status-delivered';
-
-        return `
-            <tr>
-                <td>#${id}</td>
-                <td>${escapeHtml(o.customer_name || o.customer || '')}</td>
-                <td>$${Number(o.total_amount || o.total || 0).toFixed(2)}</td>
-                <td><span class="status-badge ${statusClass}">${escapeHtml(o.status || '待处理')}</span></td>
-                <td>${escapeHtml(o.created_at ? new Date(o.created_at).toLocaleDateString() : '-')}</td>
-                <td>
-                    <button class="btn-view" data-action="edit" data-id="${id}" style="margin-right:6px;">
-                        <i class="fas fa-pen"></i> 编辑
-                    </button>
-                    <button class="btn-view" data-action="delete" data-id="${id}" style="background:#e74c3c;color:#fff;">
-                        <i class="fas fa-trash"></i> 删除
-                    </button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
-async function handleOrderSubmit(e) {
-    e.preventDefault();
-    
-    const payload = {
-        customer_name: document.getElementById('orderCustomer').value.trim(),
-        total_amount: parseFloat(document.getElementById('orderTotal').value) || 0,
-        status: document.getElementById('orderStatus').value
-    };
-
-    const isEdit = currentEditingOrderId !== null;
-    const endpoint = isEdit ? API_ENDPOINTS.UPDATE_ORDER(currentEditingOrderId) : API_ENDPOINTS.CREATE_ORDER;
-    const method = isEdit ? 'PATCH' : 'POST';
-
-    try {
-        const response = await fetch(endpoint, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        if (!response.ok) throw new Error('提交失败');
-
-        showNotification(isEdit ? '订单更新成功' : '订单创建成功', 'success');
-        document.getElementById('orderFormCard').style.display = 'none';
-        resetOrderForm();
-        loadOrderList();
-    } catch (error) {
-        console.error(error);
-        showNotification('操作失败，请重试', 'error');
-    }
-}
-
-async function handleEditOrder(orderId) {
-    try {
-        const response = await fetch(API_ENDPOINTS.GET_ORDER(orderId));
-        if (!response.ok) throw new Error('加载失败');
-        const order = await response.json();
-        
-        currentEditingOrderId = orderId;
-        document.getElementById('orderFormCard').style.display = 'block';
-        document.getElementById('orderCustomer').value = order.customer_name || order.customer || '';
-        document.getElementById('orderTotal').value = order.total_amount || order.total || 0;
-        document.getElementById('orderStatus').value = order.status || '待处理';
-        
-        document.getElementById('orderSubmitBtn').innerHTML = '<i class="fas fa-pen"></i> 更新订单';
-        // 滚动到表单位置
-        document.getElementById('orderSection').scrollIntoView({ behavior: 'smooth' });
-    } catch (error) {
-        console.error(error);
-        showNotification('加载订单详情失败', 'error');
-    }
-}
-
-async function handleDeleteOrder(orderId) {
-    if (!window.confirm(`确认删除订单 #${orderId} ?`)) return;
-
-    try {
-        const response = await fetch(API_ENDPOINTS.DELETE_ORDER(orderId), { method: 'DELETE' });
-        if (!response.ok) throw new Error('删除失败');
-        
-        showNotification('订单删除成功', 'success');
-        loadOrderList();
-    } catch (error) {
-        console.error(error);
-        showNotification('删除订单失败', 'error');
-    }
 }

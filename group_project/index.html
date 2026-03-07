@@ -87,7 +87,7 @@
             <h1 class="dashboard-title">供应商仪表板</h1>
             
             <div class="dashboard-cards">
-                <div class="card">
+                <div class="card" id="cardTodayOrders" style="cursor: pointer;" title="点击前往订单管理">
                     <div class="card-header">
                         <h3>今日订单</h3>
                         <div class="card-icon blue"><i class="fas fa-shopping-cart"></i></div>
@@ -96,7 +96,8 @@
                     <div class="card-label">较昨日增长 12%</div>
                     <div class="card-change positive">+16 个订单</div>
                 </div>
-                <div class="card">
+                
+                <div class="card" id="cardPendingOrders" style="cursor: pointer;" title="点击前往订单管理">
                     <div class="card-header">
                         <h3>待处理订单</h3>
                         <div class="card-icon orange"><i class="fas fa-clock"></i></div>
@@ -105,6 +106,7 @@
                     <div class="card-label">需要立即处理</div>
                     <div class="card-change negative">+5 个待处理</div>
                 </div>
+                
                 <div class="card">
                     <div class="card-header">
                         <h3>本月销售额</h3>
@@ -114,7 +116,8 @@
                     <div class="card-label">已完成交易额</div>
                     <div class="card-change positive">+8% 增长</div>
                 </div>
-                <div class="card" id="quickAddProduct" style="cursor: pointer;">
+                
+                <div class="card" id="quickAddProduct" style="cursor: pointer;" title="点击前往产品管理并新增">
                     <div class="card-header">
                         <h3>新增产品</h3>
                         <div class="card-icon" style="background: #9b59b6;"><i class="fas fa-plus"></i></div>
@@ -188,20 +191,21 @@
                         </div>
                         
                         <div style="display: flex; justify-content: space-between; padding-top: 15px; border-top: 1px solid #eee;">
-                            <div style="margin-bottom: 20px;">
-                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #2c3e50;">产品图片</label>
-                                <input type="file" id="productImage" accept="image/*" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: #fff;">
+                            <div style="margin-bottom: 20px; flex: 1; max-width: 60%;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #2c3e50;">产品图片 (支持多张)</label>
+                                <input type="file" id="productImage" accept="image/*" multiple style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: #fff;">
+                                
                                 <div id="imagePreviewContainer" style="margin-top: 15px; display: none;">
                                     <p style="margin-bottom: 5px; font-size: 0.9em; color: #7f8c8d;">图片预览：</p>
-                                    <img id="imagePreview" src="" alt="产品预览" style="max-width: 150px; max-height: 150px; border-radius: 5px; border: 1px solid #ddd; object-fit: cover;">
+                                    <div id="imagePreviewList" style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px;">
+                                        </div>
                                 </div>
                             </div>
-                            <div>
+                            
+                            <div style="align-self: flex-end;">
                                 <button type="button" class="btn" id="resetFormBtn" style="background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">重置</button>
                                 <button type="button" class="btn" id="cancelEditBtn" style="display: none; margin-left: 8px; background: #7f8c8d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">取消编辑</button>
-                            </div>
-                            <div>
-                                <button type="submit" class="btn" id="productSubmitBtn" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                                <button type="submit" class="btn" id="productSubmitBtn" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-left: 8px;">
                                     <i class="fas fa-save"></i> 创建产品
                                 </button>
                             </div>
@@ -224,11 +228,17 @@
                 <table class="order-table" id="productTable">
                     <thead>
                         <tr>
-                            <th>ID</th><th>名称</th><th>中文名称</th><th>价格</th><th>分类</th><th>状态</th><th>操作</th>
+                            <th>ID</th>
+                            <th>图片</th> <th>名称</th>
+                            <th>中文名称</th>
+                            <th>价格</th>
+                            <th>分类</th>
+                            <th>状态</th>
+                            <th>操作</th>
                         </tr>
                     </thead>
                     <tbody id="productTableBody">
-                        <tr><td colspan="7" style="text-align: center; color: #7f8c8d; padding: 20px;">正在加载产品...</td></tr>
+                        <tr><td colspan="8" style="text-align: center; color: #7f8c8d; padding: 20px;">正在加载产品...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -294,10 +304,6 @@
 
     </div>
 
-    <script src="https://gosspublic.alicdn.com/aliyun-oss-sdk-6.18.1.min.js"></script>
-
     <script src="script.js"></script>
 </body>
 </html>
-
-
